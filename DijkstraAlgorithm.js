@@ -1,5 +1,5 @@
-var nodes = [];
-var numNodes = 10;
+var nodes = [], unvisitedNodes = [];
+var numNodes = 100;
 var minDistance = 50;
 
 var docWidth, docHeight;
@@ -29,12 +29,22 @@ function onResize() {
 function generateBoard() {
 	nodes = new Array(numNodes);
 	nodes[0] = new Node(nodes, minDistance, 'red', 1);
+	nodes[0].distance = 0;
 	nodes[1] = new Node(nodes, minDistance, 'red', 2);
 	for (var i = 2; i < nodes.length; i++)
 		nodes[i] = new Node(nodes, minDistance);
 
 	for (var i = 0; i < nodes.length; i++)
 		nodes[i].findNeighbors(nodes);
+
+	for (var i = 0; i < nodes.length; i++)
+		nodes[i].removeTooFarNeighbors();
+
+	unvisitedNodes = new Array(nodes.length);
+	for (var i = 0; i < nodes.length; i++)
+		unvisitedNodes[i] = nodes[i];
+
+	calculateDistances(nodes[0]);
 
 	drawBoard();
 }
@@ -45,13 +55,32 @@ function clearBoard() {
 	brush.fillRect(0, 0, docWidth, docHeight);
 }
 
-function drawPath(node1, node2, color) {
+function drawPath(node1, node2, color, thickness = 1) {
+
+	var width = node2.x - node1.x;
+	var height = node2.y - node1.y;
+	var length = nodeDistance(node1, node2);
+
+	var xS = (thickness * height / length) / 2
+	var yS = (thickness * width / length) / 2;
+
 	brush.beginPath();
-	brush.moveTo(node1.x, node1.y);
-	brush.lineTo(node2.x, node2.y);
-	brush.strokeStyle = color;
-	brush.stroke();
+	brush.moveTo(node1.x - xS, node1.y + yS);
+	brush.lineTo(node1.x + xS, node1.y - yS);
+	brush.lineTo(node2.x + xS, node2.y - yS);
+	brush.lineTo(node2.x - xS, node2.y + yS);
+	brush.lineTo(node1.x - xS, node1.y + yS);
+	brush.fillStyle = color;
+	brush.fill();
 	brush.closePath();
+}
+
+function drawBestPath(node) {
+	if (node === nodes[0])
+		return;
+
+	drawPath(node, node.bestNode, 'green', 5);
+	drawBestPath(node.bestNode);
 }
 
 function drawWeb() {
@@ -71,6 +100,7 @@ function drawNode(node) {
 function drawBoard() {
 	clearBoard();
 	drawWeb();
+	drawBestPath(nodes[1]);
 	for (var i = 0; i < nodes.length; i++)
 		drawNode(nodes[i]);
 }
@@ -99,8 +129,8 @@ function getRectangle(node1, node2) {
 	var slopeTerm = Math.sqrt(1 + Math.pow(slope, 2));
 	var pslopeTerm = Math.sqrt(1 + Math.pow(pslope, 2));
 
-	var xoffset1 = minDistance / slopeTerm;
-	var xoffset2 = minDistance / slopeTerm;
+	var xoffset1 = minDistance / 2 / slopeTerm;
+	var xoffset2 = minDistance / 2 / slopeTerm;
 
 	var x1 = node1.x + xoffset1 * (node1.x < node2.x ? 1:-1);
 	var x2 = node2.x - xoffset2 * (node1.x < node2.x ? 1:-1);
@@ -170,6 +200,26 @@ function pathClear(node1, node2) {
 	return true;
 }
 
+function calculateDistances(node) {
+	var neighbors = node.neighbors, distances = node.distances;
+	for (var i = 0; i < neighbors.length; i++)
+		if (!neighbors[i].visited &&
+			node.distance + distances[i] < neighbors[i].distance) {
+			neighbors[i].distance = node.distance + distances[i];
+			neighbors[i].bestNode = node;
+		}
+	node.visited = true;
+	unvisitedNodes.splice(unvisitedNodes.indexOf(node), 1);
+
+	if (unvisitedNodes.length > 0) {
+		var bestNode = unvisitedNodes[0];
+		for (var i = 1; i < unvisitedNodes.length; i++)
+			if (unvisitedNodes[i].distance < bestNode.distance)
+				bestNode = unvisitedNodes[i];
+		calculateDistances(bestNode);
+	}
+}
+
 class Node {
 	constructor(nodes, minDistance, color='black', value=0) {
 		this.x = 0;
@@ -179,6 +229,9 @@ class Node {
 		this.value = value;
 		this.neighbors = [];
 		this.distances = []; // distances from corresponding neighbors
+		this.distance = Number.MAX_SAFE_INTEGER;
+		this.visited = false;
+		this.bestNode = this;
 
 		var works = false;
 		while (!works) {
@@ -203,6 +256,20 @@ class Node {
 				this.distances.push(nodeDistance(this, nodes[i]));
 				nodes[i].neighbors.push(this);
 				nodes[i].distances.push(nodeDistance(this, nodes[i]));
+			}
+	}
+
+	removeTooFarNeighbors() {
+		var minDistance = Math.min.apply(Math, this.distances)
+
+		for (var i = this.neighbors.length - 1; i >= 0; i--)
+			if (this.distances[i] > minDistance * 3 && this.distances[i] >
+				Math.min.apply(Math, this.neighbors[i].distances) * 2) {
+				var index = this.neighbors[i].neighbors.indexOf(this);
+				this.neighbors[i].neighbors.splice(index, 1);
+				this.neighbors[i].distances.splice(index, 1);
+				this.neighbors.splice(i, 1);
+				this.distances.splice(i, 1);
 			}
 	}
 }
