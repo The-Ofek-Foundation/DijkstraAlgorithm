@@ -84,18 +84,12 @@ function drawHeatmap() {
 			frequencies[i][a] = 0;
 	}
 
-	var bestNodes = new Array(nodes.length);
-	for (var i = 0; i < bestNodes.length; i++)
-		bestNodes[i] = 0;
-
 	for (var i = 0; i < nodes.length; i++)
 		for (var node = nodes[i]; node.bestNode !== node; node = node.bestNode) {
 			frequencies[node.i][node.bestNode.i]++;
-			bestNodes[node.bestNode.i]++;
+			node.bestNode.radius += 1/3;
 		}
 
-	for (var i = 0; i < bestNodes.length; i++)
-		nodes[i].radius += parseInt(bestNodes[i] / 3);
 
 	for (var i = 0; i < frequencies.length; i++)
 		for (var a = i + 1; a < frequencies[i].length; a++) {
