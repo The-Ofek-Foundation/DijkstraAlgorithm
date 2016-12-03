@@ -38,7 +38,7 @@ function generateBoard() {
 		nodes[i].findNeighbors(nodes);
 
 	for (var i = 0; i < nodes.length; i++)
-		nodes[i].removeTooFarNeighbors();
+		nodes[i].cleanupNeighbors(nodes);
 
 	unvisitedNodes = new Array(nodes.length);
 	for (var i = 0; i < nodes.length; i++)
@@ -110,6 +110,10 @@ function nodeDistance(node1, node2) {
 		Math.pow(node1.y - node2.y, 2));
 }
 
+function getSlope(x1, y1, x2, y2) {
+	return (y1 - y2) / (x1 - x2);
+}
+
 function rectangleArea(rect) {
 	return Math.abs(
 		rect[0][0] * rect[1][1] - rect[0][1] * rect[1][0] +
@@ -137,8 +141,8 @@ function getRectangle(node1, node2) {
 	var y1 = node1.y + xoffset1 * slope * (node1.x < node2.x ? 1:-1);
 	var y2 = node2.y - xoffset2 * slope * (node1.x < node2.x ? 1:-1);
 
-	xoffset1 = node1.radius / pslopeTerm * 4;
-	xoffset2 = node2.radius / pslopeTerm * 4;
+	xoffset1 = node1.radius / pslopeTerm * 2;
+	xoffset2 = node2.radius / pslopeTerm * 2;
 
 	return [
 		[x1 + xoffset1, y1 + xoffset1 * pslope],
@@ -190,6 +194,34 @@ function withinRectangle(rect, node) {
 	return sum <= rectangleArea(rect) + 100;
 }
 
+function withinCones(node, cones) {
+	for (var i = 0; i < cones.length; i++)
+		if (withinRectangle(cones[i], node))
+			return true;
+	return false;
+}
+
+function createCone(node1, node2) {
+	var slope = (node1.y - node2.y) / (node1.x - node2.x);
+	var pslope = -1 / slope; // perpendicular slope
+	var slopeTerm = Math.sqrt(1 + Math.pow(slope, 2));
+	var pslopeTerm = Math.sqrt(1 + Math.pow(pslope, 2));
+	var distance = nodeDistance(node1, node2);
+
+	var xoffset1 = node1.radius / pslopeTerm;
+	var xoffset2 = (node1.radius + distance / 4) / pslopeTerm;
+
+	var x1 = node1.x + xoffset1, y1 = node1.y + xoffset1 * pslope;
+	var x2 = node1.x - xoffset1, y2 = node1.y - xoffset1 * pslope;
+
+	var x3 = x1 + (node2.x + xoffset2 - x1) * docWidth * docHeight;
+	var x4 = x2 + (node2.x - xoffset2 - x2) * docWidth * docHeight;
+
+	var y3 = y1 + (node2.y + xoffset2 * pslope - y1) * docWidth * docHeight;
+	var y4 = y2 + (node2.y - xoffset2 * pslope - y2) * docWidth * docHeight;
+
+	return [[x1, y1], [x2,y2], [x4, y4], [x3, y3]];
+}
 
 function pathClear(node1, node2) {
 	var rect = getRectangle(node1, node2);
@@ -220,6 +252,24 @@ function calculateDistances(node) {
 	}
 }
 
+function attachNodes(node1, node2) {
+	var distance = nodeDistance(node1, node2);
+	node1.neighbors.push(node2);
+	node1.distances.push(distance);
+	node2.neighbors.push(node1);
+	node2.distances.push(distance);
+}
+
+function detachNodes(node1, node2) {
+	var index1 = node1.neighbors.indexOf(node2);
+	var index2 = node2.neighbors.indexOf(node1);
+
+	node1.neighbors.splice(index1, 1);
+	node1.distances.splice(index1, 1);
+	node2.neighbors.splice(index2, 1);
+	node2.distances.splice(index2, 1);
+}
+
 class Node {
 	constructor(nodes, minDistance, color='black', value=0) {
 		this.x = 0;
@@ -228,10 +278,12 @@ class Node {
 		this.radius = 15;
 		this.value = value;
 		this.neighbors = [];
+		this.safeNeighbors = [];
 		this.distances = []; // distances from corresponding neighbors
 		this.distance = Number.MAX_SAFE_INTEGER;
 		this.visited = false;
 		this.bestNode = this;
+		this.compared = false;
 
 		var works = false;
 		while (!works) {
@@ -249,27 +301,83 @@ class Node {
 	}
 
 	findNeighbors(nodes) {
+		var neighbors = [];
+		var distances = [];
 		for (var i = 0; i < nodes.length && nodes[i] !== undefined; i++)
-			if (nodes[i] !== this && this.neighbors.indexOf(nodes[i]) === -1
-				&& pathClear(this, nodes[i])) {
-				this.neighbors.push(nodes[i]);
-				this.distances.push(nodeDistance(this, nodes[i]));
-				nodes[i].neighbors.push(this);
-				nodes[i].distances.push(nodeDistance(this, nodes[i]));
+			if (nodes[i] !== this) {
+				neighbors.push(nodes[i]);
+				distances.push(nodeDistance(this, nodes[i]));
 			}
+
+		for (var i = 0; i < neighbors.length; i++)
+			neighbors[i].compared = false;
+
+		var cones = [];
+		for (var i = 0; i < neighbors.length; i++) {
+			var minDistance = docWidth * docHeight, bestNode;
+			for (var a = 0; a < neighbors.length; a++)
+				if (!neighbors[a].compared && distances[a] < minDistance) {
+					minDistance = distances[a];
+					bestNode = neighbors[a];
+				}
+			if (!withinCones(bestNode, cones) &&
+				this.neighbors.indexOf(bestNode) === -1)
+				attachNodes(this, bestNode);
+			cones.push(createCone(this, bestNode));
+			bestNode.compared = true;
+		}
 	}
 
-	removeTooFarNeighbors() {
-		var minDistance = Math.min.apply(Math, this.distances)
-
-		for (var i = this.neighbors.length - 1; i >= 0; i--)
-			if (this.distances[i] > minDistance * 3 && this.distances[i] >
-				Math.min.apply(Math, this.neighbors[i].distances) * 2) {
-				var index = this.neighbors[i].neighbors.indexOf(this);
-				this.neighbors[i].neighbors.splice(index, 1);
-				this.neighbors[i].distances.splice(index, 1);
-				this.neighbors.splice(i, 1);
-				this.distances.splice(i, 1);
-			}
+	cleanupNeighbors(nodes) {
+		for (var i = this.neighbors.length - 1; i >= 0; i--) {
+			outer:
+			for (var a = nodes.length - 1; a >= 0; a--)
+				if (nodes[a] !== this && nodes[a] !== this.neighbors[i])
+					for (var b = nodes[a].neighbors.length - 1; b >= 0; b--)
+						if (nodes[a].neighbors[b] !== this && nodes[a].neighbors[b] !== this.neighbors[i])
+							if (lineIntersect(
+								this.x, this.y,
+								this.neighbors[i].x, this.neighbors[i].y,
+								nodes[a].x, nodes[a].y,
+								nodes[a].neighbors[b].x, nodes[a].neighbors[b].y))
+								if (nodeDistance(this, this.neighbors[i]) <
+									nodeDistance(nodes[a], nodes[a].neighbors[b])) {
+									detachNodes(nodes[a], nodes[a].neighbors[b]);
+								} else {
+									detachNodes(this, this.neighbors[i]);
+									break outer;
+								}
+		}
 	}
+}
+
+// not my code
+function lineIntersect(x1,y1,x2,y2, x3,y3,x4,y4) {
+    var x=((x1*y2-y1*x2)*(x3-x4)-(x1-x2)*(x3*y4-y3*x4))/((x1-x2)*(y3-y4)-(y1-y2)*(x3-x4));
+    var y=((x1*y2-y1*x2)*(y3-y4)-(y1-y2)*(x3*y4-y3*x4))/((x1-x2)*(y3-y4)-(y1-y2)*(x3-x4));
+    if (isNaN(x)||isNaN(y)) {
+        return false;
+    } else {
+        if (x1>=x2) {
+            if (!(x2<=x&&x<=x1)) {return false;}
+        } else {
+            if (!(x1<=x&&x<=x2)) {return false;}
+        }
+        if (y1>=y2) {
+            if (!(y2<=y&&y<=y1)) {return false;}
+        } else {
+            if (!(y1<=y&&y<=y2)) {return false;}
+        }
+        if (x3>=x4) {
+            if (!(x4<=x&&x<=x3)) {return false;}
+        } else {
+            if (!(x3<=x&&x<=x4)) {return false;}
+        }
+        if (y3>=y4) {
+            if (!(y4<=y&&y<=y3)) {return false;}
+        } else {
+            if (!(y3<=y&&y<=y4)) {return false;}
+        }
+    }
+    return true;
 }
