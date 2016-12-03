@@ -1,7 +1,7 @@
 var nodes = [], unvisitedNodes = [];
 var numNodes = 100;
-var minDistance = 100;
 var radii = 10;
+var minDistance = radii * 10;
 
 var docWidth, docHeight;
 var boardui = getElemId("board");
@@ -20,6 +20,8 @@ function resizeBoard() {
 	setElemHeight(boardui, docHeight);
 	boardui.setAttribute('width', docWidth);
 	boardui.setAttribute('height', docHeight);
+
+	numNodes = parseInt(docWidth * docHeight / Math.pow(minDistance * 1.5, 2));
 }
 
 function onResize() {
@@ -315,10 +317,10 @@ class Node {
 		var works = false;
 		while (!works) {
 			works = true;
-			this.x = parseInt(Math.random() * (docWidth - this.radius * 2))
-				+ this.radius;
-			this.y = parseInt(Math.random() * (docHeight - this.radius * 2))
-				+ this.radius;
+			this.x = parseInt(Math.random() * (docWidth - minDistance / 2))
+				+ minDistance / 4;
+			this.y = parseInt(Math.random() * (docHeight - minDistance / 2))
+				+ minDistance / 4;
 			for (var i = 0; i < nodes.length && nodes[i] !== undefined; i++)
 				if (nodeDistance(this, nodes[i]) < minDistance) {
 					works = false;
