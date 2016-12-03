@@ -1,6 +1,7 @@
 var nodes = [], unvisitedNodes = [];
 var numNodes = 100;
-var minDistance = 50;
+var minDistance = 100;
+var radii = 10;
 
 var docWidth, docHeight;
 var boardui = getElemId("board");
@@ -28,11 +29,11 @@ function onResize() {
 
 function generateBoard() {
 	nodes = new Array(numNodes);
-	nodes[0] = new Node(nodes, minDistance, 'red', 1);
+	nodes[0] = new Node(nodes, 0, minDistance, 'blue', 1);
 	nodes[0].distance = 0;
-	nodes[1] = new Node(nodes, minDistance, 'red', 2);
+	nodes[1] = new Node(nodes, 1, minDistance, 'black', 2);
 	for (var i = 2; i < nodes.length; i++)
-		nodes[i] = new Node(nodes, minDistance);
+		nodes[i] = new Node(nodes, i, minDistance);
 
 	for (var i = 0; i < nodes.length; i++)
 		nodes[i].findNeighbors(nodes);
@@ -75,6 +76,36 @@ function drawPath(node1, node2, color, thickness = 1) {
 	brush.closePath();
 }
 
+function drawHeatmap() {
+	var frequencies = new Array(nodes.length);
+	for (var i = 0; i < frequencies.length; i++) {
+		frequencies[i] = new Array(nodes.length);
+		for (var a = 0; a < frequencies[i].length; a++)
+			frequencies[i][a] = 0;
+	}
+
+	var bestNodes = new Array(nodes.length);
+	for (var i = 0; i < bestNodes.length; i++)
+		bestNodes[i] = 0;
+
+	for (var i = 0; i < nodes.length; i++)
+		for (var node = nodes[i]; node.bestNode !== node; node = node.bestNode) {
+			frequencies[node.i][node.bestNode.i]++;
+			bestNodes[node.bestNode.i]++;
+		}
+
+	for (var i = 0; i < bestNodes.length; i++)
+		nodes[i].radius += parseInt(bestNodes[i] / 3);
+
+	for (var i = 0; i < frequencies.length; i++)
+		for (var a = i + 1; a < frequencies[i].length; a++) {
+			if (frequencies[i][a] + frequencies[a][i] > 0)
+				drawPath(nodes[i], nodes[a], 'red', 2);
+			drawPath(nodes[i], nodes[a], 'rgba(255, 0, 0, 0.8)',
+				frequencies[i][a] + frequencies[a][i]);
+		}
+}
+
 function drawBestPath(node) {
 	if (node === nodes[0] || node.bestNode === node)
 		return;
@@ -100,8 +131,9 @@ function drawNode(node) {
 function drawBoard() {
 	clearBoard();
 	drawWeb();
-	drawBestPath(nodes[1]);
-	for (var i = 0; i < nodes.length; i++)
+	drawHeatmap();
+	// drawBestPath(nodes[1]);
+	for (var i = nodes.length - 1; i >= 0; i--)
 		drawNode(nodes[i]);
 }
 
@@ -271,11 +303,11 @@ function detachNodes(node1, node2) {
 }
 
 class Node {
-	constructor(nodes, minDistance, color='black', value=0) {
+	constructor(nodes, index, minDistance, color='black', value=0) {
 		this.x = 0;
 		this.y = 0;
 		this.color = color;
-		this.radius = 15;
+		this.radius = radii;
 		this.value = value;
 		this.neighbors = [];
 		this.safeNeighbors = [];
@@ -284,6 +316,7 @@ class Node {
 		this.visited = false;
 		this.bestNode = this;
 		this.compared = false;
+		this.i = index;
 
 		var works = false;
 		while (!works) {
