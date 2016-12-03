@@ -76,7 +76,7 @@ function drawPath(node1, node2, color, thickness = 1) {
 }
 
 function drawBestPath(node) {
-	if (node === nodes[0])
+	if (node === nodes[0] || node.bestNode === node)
 		return;
 
 	drawPath(node, node.bestNode, 'green', 5);
