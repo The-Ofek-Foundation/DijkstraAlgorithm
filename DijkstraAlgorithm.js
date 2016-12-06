@@ -47,7 +47,7 @@ function generateBoard() {
 	for (var i = 0; i < nodes.length; i++)
 		unvisitedNodes[i] = nodes[i];
 
-	calculateDistances(nodes[0]);
+	calculateDistances();
 
 	drawBoard();
 }
@@ -260,23 +260,22 @@ function pathClear(node1, node2) {
 	return true;
 }
 
-function calculateDistances(node) {
-	var neighbors = node.neighbors, distances = node.distances;
-	for (var i = 0; i < neighbors.length; i++)
-		if (!neighbors[i].visited &&
-			node.distance + distances[i] < neighbors[i].distance) {
-			neighbors[i].distance = node.distance + distances[i];
-			neighbors[i].bestNode = node;
-		}
-	node.visited = true;
-	unvisitedNodes.splice(unvisitedNodes.indexOf(node), 1);
-
-	if (unvisitedNodes.length > 0) {
+function calculateDistances() {
+	while (unvisitedNodes.length > 0) {
 		var bestNode = unvisitedNodes[0];
 		for (var i = 1; i < unvisitedNodes.length; i++)
 			if (unvisitedNodes[i].distance < bestNode.distance)
 				bestNode = unvisitedNodes[i];
-		calculateDistances(bestNode);
+
+		var neighbors = bestNode.neighbors, distances = bestNode.distances;
+		for (var i = 0; i < neighbors.length; i++)
+			if (!neighbors[i].visited &&
+				bestNode.distance + distances[i] < neighbors[i].distance) {
+				neighbors[i].distance = bestNode.distance + distances[i];
+				neighbors[i].bestNode = bestNode;
+			}
+		bestNode.visited = true;
+		unvisitedNodes.splice(unvisitedNodes.indexOf(bestNode), 1);
 	}
 }
 
