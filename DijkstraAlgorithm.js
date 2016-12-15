@@ -409,3 +409,14 @@ function lineIntersect(x1,y1,x2,y2, x3,y3,x4,y4) {
     }
     return true;
 }
+
+document.addEventListener('keypress', function (event) {
+	switch (event.which) {
+		// case 115: case 83: // s
+		// 	showSettingsForm();
+		// 	break;
+		case 110: case 78: // n
+			generateBoard();
+			break;
+	}
+});
